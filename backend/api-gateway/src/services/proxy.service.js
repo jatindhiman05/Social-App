@@ -31,16 +31,27 @@ class ProxyService {
         });
     }
 
+    // In your proxy.service.js, update the createPostProxy method:
     createPostProxy() {
         return createProxyMiddleware({
             target: services.post,
             changeOrigin: true,
-            pathRewrite: { '^/api/blogs': '/api' },
+            // IMPORTANT: Change this line
+            pathRewrite: function (path, req) {
+                // If the path is exactly '/api/blogs', rewrite to '/api'
+                // If it's '/api/blogs/search', rewrite to '/api/search'
+                // If it's '/api/blogs/:id', rewrite to '/api/:id'
+                if (path === '/api/blogs') {
+                    return '/api';
+                } else if (path.startsWith('/api/blogs/')) {
+                    return '/api' + path.substring('/api/blogs'.length);
+                }
+                return path;
+            },
             onProxyReq: (proxyReq, req) => {
-                // For multipart/form-data, remove content-type header and let it pass through
                 if (req.headers['content-type'] &&
                     req.headers['content-type'].includes('multipart/form-data')) {
-                    // Don't parse, let it pass through as stream
+                    // Let multipart pass through
                 }
             }
         });

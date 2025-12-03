@@ -1,3 +1,4 @@
+// In your app.js, move the routes BEFORE the 404 handler
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -27,7 +28,6 @@ app.use((req, res, next) => {
     } else {
         // Parse JSON for other content types
         express.json({ limit: '50mb' })(req, res, next);
-        express.urlencoded({ extended: true, limit: '50mb' })(req, res, next);
     }
 });
 
@@ -48,7 +48,7 @@ mongoose.connection.on("connected", () => {
 // Connect to RabbitMQ
 rabbitmqService.connect();
 
-// Routes
+// === IMPORTANT: ROUTES MUST COME BEFORE 404 HANDLER ===
 app.use('/api', blogRoutes);
 
 // Health check
@@ -60,20 +60,32 @@ app.get('/health', (req, res) => {
     });
 });
 
-// 404 handler
+// Test route for debugging
+app.get('/api/test', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: 'Post service is working'
+    });
+});
+
+// 404 handler - MUST BE LAST (after all routes)
 app.use('*', (req, res) => {
+    console.log('404 Route not found:', req.originalUrl);
     res.status(404).json({
         success: false,
-        message: 'Route not found'
+        message: 'Route not found in post service'
     });
 });
 
 // Error handler
 app.use((err, req, res, next) => {
-    console.error(err.stack);
+    console.error('Error handler caught:', err.message);
+    if (res.headersSent) {
+        return next(err);
+    }
     res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Internal server error in post service'
     });
 });
 

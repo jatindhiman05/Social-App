@@ -14,7 +14,20 @@ function usePagination(path, queryParams = {}, limit = 1, page = 1) {
         async function fetchSearchBlogs() {
             try {
                 startLoading();
-                const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/${path}`, {
+
+                // FIX: Use the correct endpoint structure
+                // The issue is that /api/blogs is being rewritten incorrectly
+                let apiPath;
+
+                if (path === "blogs") {
+                    // For homepage, we need to call the correct endpoint
+                    // Since /api/blogs is being interpreted as /api/:blogId
+                    apiPath = "blogs/all"; // Create a new endpoint
+                } else {
+                    apiPath = path;
+                }
+
+                const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/${apiPath}`, {
                     params: { ...queryParams, limit, page },
                 });
 

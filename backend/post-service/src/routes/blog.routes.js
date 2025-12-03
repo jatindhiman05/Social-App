@@ -4,13 +4,16 @@ const authMiddleware = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
-// Public routes
+// ===== FIXED ROUTES =====
+// Add this new route for the frontend fix
+router.get('/all', blogController.getBlogs); // This will handle /api/all
+
+// Existing routes
 router.get('/search', blogController.searchBlogs);
 router.get('/user/:userId', blogController.getBlogsByUser);
 router.get('/:blogId', blogController.getBlog);
-router.get('/', blogController.getBlogs);
 
-// Protected routes (require authentication)
+// Protected routes
 router.post('/', authMiddleware.verifyToken, blogController.createBlog);
 router.patch('/:id', authMiddleware.verifyToken, blogController.updateBlog);
 router.delete('/:id', authMiddleware.verifyToken, blogController.deleteBlog);

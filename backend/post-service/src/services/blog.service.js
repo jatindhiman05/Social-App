@@ -5,6 +5,67 @@ const rabbitmqService = require('./rabbitmq.service');
 const imageService = require('./image.service');
 
 class BlogService {
+    // ========== ADD THIS METHOD ==========
+    async getBlogs(page = 1, limit = 10) {
+        try {
+            const skip = (page - 1) * limit;
+
+            // Only fetch published blogs (not drafts) for homepage
+            const query = { draft: false };
+
+            console.log(`Fetching blogs: page=${page}, limit=${limit}, skip=${skip}`);
+
+            // Get blogs with pagination, sorted by creation date
+            const blogs = await Blog.find(query)
+                .sort({ createdAt: -1 }) // Newest first
+                .skip(skip)
+                .limit(limit)
+                .lean(); // Use lean() for better performance
+
+            console.log(`Found ${blogs.length} blogs`);
+
+            // Get total count for hasMore calculation
+            const totalBlogs = await Blog.countDocuments(query);
+
+            // IMPORTANT: Your frontend expects blogs array and hasMore boolean
+            return {
+                blogs, // This should match your frontend expectation
+                hasMore: skip + blogs.length < totalBlogs, // Calculate if there are more blogs
+                total: totalBlogs,
+                page,
+                limit
+            };
+        } catch (error) {
+            console.error('Get blogs error:', error);
+            throw error;
+        }
+    }
+
+    // ========== ALSO ADD THIS METHOD IF IT'S MISSING ==========
+    async getBlog(blogId) {
+        try {
+            console.log(`Getting blog with blogId: ${blogId}`);
+
+            // Try to find by blogId first
+            let blog = await Blog.findOne({ blogId: blogId }).lean();
+
+            // If not found by blogId, try by MongoDB _id
+            if (!blog) {
+                blog = await Blog.findById(blogId).lean();
+            }
+
+            if (!blog) {
+                throw new Error('Blog not found');
+            }
+
+            return blog;
+        } catch (error) {
+            console.error('Get blog error:', error);
+            throw error;
+        }
+    }
+
+    // ========== YOUR EXISTING METHODS ==========
     async createBlog(creator, blogData, images) {
         try {
             console.log("=== BLOG SERVICE ===");
@@ -253,7 +314,7 @@ class BlogService {
         }
     }
 
-     async deleteBlog(blogId, userId) {
+    async deleteBlog(blogId, userId) {
         try {
             const blog = await Blog.findOne({ blogId: blogId });
 

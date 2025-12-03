@@ -76,19 +76,29 @@ class BlogController {
 
     async getBlogs(req, res) {
         try {
+            console.log('getBlogs called with query:', req.query);
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
 
+            // Call the getBlogs service method
             const result = await blogService.getBlogs(page, limit);
 
-            res.status(200).json({
+            console.log('getBlogs result:', {
+                blogsCount: result.blogs?.length,
+                hasMore: result.hasMore
+            });
+
+            // IMPORTANT: Send ONE response only
+            return res.status(200).json({
                 success: true,
                 message: 'Blogs fetched successfully',
-                ...result
+                blogs: result.blogs,
+                hasMore: result.hasMore
             });
         } catch (error) {
             console.error('Get blogs error:', error);
-            res.status(500).json({
+            // IMPORTANT: Use return to prevent multiple responses
+            return res.status(500).json({
                 success: false,
                 message: error.message || 'Failed to fetch blogs'
             });
@@ -98,6 +108,14 @@ class BlogController {
     async getBlog(req, res) {
         try {
             const { blogId } = req.params;
+
+            // ADD THIS LOGGING
+            console.log('=== GET BLOG DEBUG ===');
+            console.log('Request URL:', req.originalUrl);
+            console.log('Request path:', req.path);
+            console.log('Route params:', req.params);
+            console.log('Query params:', req.query);
+            console.log('blogId parameter:', blogId);
 
             const blog = await blogService.getBlog(blogId);
 
