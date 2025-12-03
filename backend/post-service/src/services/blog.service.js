@@ -7,56 +7,105 @@ const imageService = require('./image.service');
 class BlogService {
     async createBlog(creator, blogData, images) {
         try {
-            console.log(blogData);
+            console.log("=== BLOG SERVICE ===");
+            console.log("Blog data received:", {
+                title: blogData.title,
+                description: blogData.description,
+                tags: blogData.tags,
+                draft: blogData.draft
+            });
+            console.log("Number of images received:", images.length);
+
             const { title, description, content, tags, draft } = blogData;
 
-            if (!title || !description || !content) {
-                throw new Error('Title, description, and content are required.');
+            // Parse content and tags if they are strings
+            let parsedContent;
+            try {
+                parsedContent = typeof content === 'string' ? JSON.parse(content) : content;
+                console.log("Content parsed successfully");
+            } catch (error) {
+                console.error('Error parsing content:', error);
+                throw new Error('Invalid content format');
+            }
+
+            let parsedTags = [];
+            try {
+                parsedTags = typeof tags === 'string' ? JSON.parse(tags) : (tags || []);
+                console.log("Tags parsed:", parsedTags);
+            } catch (error) {
+                console.error('Error parsing tags:', error);
+                parsedTags = [];
+            }
+
+            // Validate required fields
+            if (!title || !description || !parsedContent) {
+                throw new Error('Title, description, and content are required');
+            }
+
+            // Upload main blog image (first image)
+            let secure_url = '';
+            let public_id = '';
+
+            if (images && images.length > 0) {
+                console.log("Uploading main image...");
+                const mainImage = images[0];
+                const uploadResult = await imageService.uploadImage(
+                    `data:${mainImage.mimetype};base64,${mainImage.buffer.toString("base64")}`
+                );
+                secure_url = uploadResult.url;
+                public_id = uploadResult.publicId;
+                console.log("Main image uploaded:", { secure_url, public_id });
+            } else {
+                console.log("No main image found!");
+                throw new Error('Main image is required');
             }
 
             // Upload embedded images from content
-            let imageIndex = 0;
-            const contentObj = JSON.parse(content);
+            let imageIndex = 1; // Start from 1 because main image is at index 0
+            const contentObj = parsedContent;
 
             if (contentObj.blocks) {
+                console.log("Processing content blocks...");
                 for (let i = 0; i < contentObj.blocks.length; i++) {
                     const block = contentObj.blocks[i];
                     if (block.type === "image" && images && images[imageIndex]) {
-                        const { secure_url, public_id } = await imageService.uploadImage(
-                            `data:image/jpeg;base64,${images[imageIndex].buffer.toString("base64")}`
-                        );
+                        console.log(`Uploading embedded image ${imageIndex}...`);
+                        try {
+                            const embedImage = images[imageIndex];
+                            const { url: embedUrl, publicId: embedId } = await imageService.uploadImage(
+                                `data:${embedImage.mimetype};base64,${embedImage.buffer.toString("base64")}`
+                            );
 
-                        block.data.file = {
-                            url: secure_url,
-                            imageId: public_id,
-                        };
-                        imageIndex++;
+                            block.data.file = {
+                                url: embedUrl,
+                                imageId: embedId,
+                            };
+                            console.log(`Embedded image uploaded: ${embedUrl}`);
+                            imageIndex++;
+                        } catch (error) {
+                            console.error('Error uploading embedded image:', error);
+                            imageIndex++;
+                        }
                     }
                 }
             }
 
-            // Upload main blog image
-            const mainImage = images && images[0];
-            if (!mainImage) {
-                throw new Error('Main image is required');
-            }
-
-            const { secure_url, public_id } = await imageService.uploadImage(
-                `data:image/jpeg;base64,${mainImage.buffer.toString("base64")}`
-            );
-
-            const blogId = title.toLowerCase().split(" ").join("-") + "-" + randomUUID();
+            const blogId = title.toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                + "-" + randomUUID();
 
             const blog = await Blog.create({
                 title,
                 description,
                 content: contentObj,
-                draft: draft === "false" ? false : true,
+                draft: draft === true || draft === 'true',
                 creator,
                 image: secure_url,
                 imageId: public_id,
                 blogId,
-                tags: JSON.parse(tags || '[]'),
+                tags: Array.isArray(parsedTags) ? parsedTags : [],
             });
 
             // Publish blog created event
@@ -89,61 +138,12 @@ class BlogService {
         }
     }
 
-    async getBlogs(page = 1, limit = 10) {
-        try {
-            const skip = (page - 1) * limit;
-
-            const blogs = await Blog.find({ draft: false })
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean();
-
-            const totalBlogs = await Blog.countDocuments({ draft: false });
-
-            return {
-                blogs,
-                hasMore: skip + limit < totalBlogs,
-                total: totalBlogs,
-                page,
-                limit
-            };
-        } catch (error) {
-            console.error('Get blogs error:', error);
-            throw error;
-        }
-    }
-
-    async getBlog(blogId) {
-        try {
-            const blog = await Blog.findOne({ blogId }).lean();
-
-            if (!blog) {
-                throw new Error('Blog not found');
-            }
-
-            // Get user info from user service via RabbitMQ (async)
-            rabbitmqService.publish('user.events', {
-                type: 'GET_USER_INFO',
-                userId: blog.creator,
-                blogId: blog._id
-            });
-
-            // Get comments from comment service (async)
-            rabbitmqService.publish('comment.events', {
-                type: 'GET_BLOG_COMMENTS',
-                blogId: blog._id
-            });
-
-            return blog;
-        } catch (error) {
-            console.error('Get blog error:', error);
-            throw error;
-        }
-    }
-
     async updateBlog(blogId, userId, updateData, images) {
         try {
+            console.log("Updating blog:", blogId);
+            console.log("Update data:", updateData);
+            console.log("Images:", images);
+
             const blog = await Blog.findOne({ blogId: blogId });
 
             if (!blog) {
@@ -156,33 +156,45 @@ class BlogService {
 
             const { title, description, content, tags, draft, existingImages } = updateData;
 
-            // Handle existing images (from your code)
+            // Handle existing images
             let imagesToDelete = [];
-            if (existingImages) {
-                const existingImagesArray = JSON.parse(existingImages);
+            if (existingImages && Array.isArray(existingImages)) {
                 imagesToDelete = blog.content.blocks
                     .filter(block => block.type === "image")
-                    .filter(block => !existingImagesArray.find(({ url }) => url === block.data.file.url))
-                    .map(block => block.data.file.imageId);
+                    .filter(block => {
+                        const blockUrl = block.data?.file?.url;
+                        return blockUrl && !existingImages.find(img => img.url === blockUrl);
+                    })
+                    .map(block => block.data.file.imageId)
+                    .filter(id => id); // Filter out undefined
             }
 
             // Upload new embedded images
-            if (content && images) {
-                let imageIndex = 0;
-                const contentObj = JSON.parse(content);
+            if (content && content.blocks && images && images.embedded) {
+                let embeddedImageIndex = 0;
+                const contentObj = content;
 
                 for (let i = 0; i < contentObj.blocks.length; i++) {
                     const block = contentObj.blocks[i];
-                    if (block.type === "image" && block.data.file.image) {
-                        const uploadResult = await imageService.uploadImage(
-                            `data:image/jpeg;base64,${images[imageIndex].buffer.toString("base64")}`
-                        );
+                    if (block.type === "image") {
+                        // Check if this image needs to be replaced with a new upload
+                        const hasNewImage = images.embedded[embeddedImageIndex];
+                        if (hasNewImage && block.data.file && block.data.file.image) {
+                            try {
+                                const { secure_url, public_id } = await imageService.uploadImage(
+                                    `data:image/jpeg;base64,${images.embedded[embeddedImageIndex].buffer.toString("base64")}`
+                                );
 
-                        block.data.file = {
-                            url: uploadResult.secure_url,
-                            imageId: uploadResult.public_id,
-                        };
-                        imageIndex++;
+                                block.data.file = {
+                                    url: secure_url,
+                                    imageId: public_id,
+                                };
+                                embeddedImageIndex++;
+                            } catch (error) {
+                                console.error('Error uploading new embedded image:', error);
+                                embeddedImageIndex++;
+                            }
+                        }
                     }
                 }
                 blog.content = contentObj;
@@ -190,24 +202,36 @@ class BlogService {
 
             // Update cover image if provided
             if (images && images.cover) {
-                await imageService.deleteImage(blog.imageId);
-                const uploadResult = await imageService.uploadImage(
-                    `data:image/jpeg;base64,${images.cover.buffer.toString("base64")}`
-                );
-                blog.image = uploadResult.secure_url;
-                blog.imageId = uploadResult.public_id;
+                try {
+                    // Delete old image
+                    if (blog.imageId) {
+                        await imageService.deleteImage(blog.imageId);
+                    }
+
+                    const { secure_url, public_id } = await imageService.uploadImage(
+                        `data:image/jpeg;base64,${images.cover.buffer.toString("base64")}`
+                    );
+                    blog.image = secure_url;
+                    blog.imageId = public_id;
+                } catch (error) {
+                    console.error('Error updating cover image:', error);
+                }
             }
 
             // Delete removed images
             if (imagesToDelete.length > 0) {
-                await imageService.deleteMultipleImages(imagesToDelete);
+                try {
+                    await imageService.deleteMultipleImages(imagesToDelete);
+                } catch (error) {
+                    console.error('Error deleting images:', error);
+                }
             }
 
             // Update other fields
-            if (title) blog.title = title;
-            if (description) blog.description = description;
-            if (tags) blog.tags = JSON.parse(tags);
-            if (draft !== undefined) blog.draft = draft === "false" ? false : true;
+            if (title !== undefined) blog.title = title;
+            if (description !== undefined) blog.description = description;
+            if (tags !== undefined) blog.tags = Array.isArray(tags) ? tags : [];
+            if (draft !== undefined) blog.draft = draft;
 
             await blog.save();
 
@@ -229,7 +253,7 @@ class BlogService {
         }
     }
 
-    async deleteBlog(blogId, userId) {
+     async deleteBlog(blogId, userId) {
         try {
             const blog = await Blog.findOne({ blogId: blogId });
 

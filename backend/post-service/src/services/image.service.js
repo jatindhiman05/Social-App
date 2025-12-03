@@ -1,4 +1,5 @@
 const cloudinary = require('cloudinary').v2;
+const streamifier = require('streamifier');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -9,34 +10,88 @@ cloudinary.config({
 
 class ImageService {
     async uploadImage(base64Image) {
-        try {
-            const result = await cloudinary.uploader.upload(base64Image, {
-                folder: "blog-app",
-            });
-            return result;
-        } catch (error) {
-            console.error('Image upload error:', error);
-            throw new Error('Failed to upload image');
-        }
+        return new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                {
+                    folder: "blog-app",
+                    resource_type: 'auto'
+                },
+                (error, result) => {
+                    if (error) {
+                        console.error('Cloudinary upload error:', error);
+                        reject(new Error('Failed to upload image'));
+                    } else {
+                        resolve({
+                            url: result.secure_url,
+                            publicId: result.public_id,
+                            format: result.format,
+                            width: result.width,
+                            height: result.height,
+                            bytes: result.bytes
+                        });
+                    }
+                }
+            );
+
+            // Convert base64 to buffer and pipe to upload stream
+            const buffer = Buffer.from(base64Image.split(',')[1], 'base64');
+            streamifier.createReadStream(buffer).pipe(uploadStream);
+        });
     }
 
     async deleteImage(imageId) {
         try {
-            await cloudinary.uploader.destroy(imageId);
+            const result = await cloudinary.uploader.destroy(imageId);
+
+            if (result.result === 'ok') {
+                return { success: true, message: 'Image deleted successfully' };
+            } else {
+                throw new Error('Failed to delete image');
+            }
         } catch (error) {
-            console.error('Image delete error:', error);
+            console.error('Cloudinary delete error:', error);
             throw new Error('Failed to delete image');
         }
     }
 
-    async uploadMultipleImages(images) {
-        const uploadPromises = images.map(image => this.uploadImage(image));
-        return Promise.all(uploadPromises);
+    async deleteMultipleImages(publicIds) {
+        try {
+            const deletePromises = publicIds.map(publicId =>
+                cloudinary.uploader.destroy(publicId).catch(err => {
+                    console.error(`Failed to delete image ${publicId}:`, err);
+                    return null;
+                })
+            );
+
+            const results = await Promise.all(deletePromises);
+
+            const successful = results.filter(result => result && result.result === 'ok').length;
+            const failed = results.length - successful;
+
+            return {
+                success: true,
+                message: `Deleted ${successful} images, ${failed} failed`,
+                deletedCount: successful,
+                failedCount: failed
+            };
+        } catch (error) {
+            console.error('Cloudinary delete multiple error:', error);
+            throw new Error('Failed to delete images');
+        }
     }
 
-    async deleteMultipleImages(imageIds) {
-        const deletePromises = imageIds.map(id => this.deleteImage(id));
-        return Promise.all(deletePromises);
+    async uploadMultipleImages(images, folder = 'blog-app') {
+        try {
+            const uploadPromises = images.map(image =>
+                this.uploadImage(`data:${image.mimetype};base64,${image.buffer.toString('base64')}`, folder)
+            );
+
+            const results = await Promise.all(uploadPromises);
+            return results;
+        } catch (error) {
+            console.error('Cloudinary upload multiple error:', error);
+            throw new Error('Failed to upload images');
+        }
     }
 }
 

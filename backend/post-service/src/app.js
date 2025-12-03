@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const compression = require('compression');
 const blogRoutes = require('./routes/blog.routes');
 const rabbitmqService = require('./services/rabbitmq.service');
+const parseMultipartFormData = require('./middlewares/multipart.middleware');
 
 const app = express();
 
@@ -17,21 +18,33 @@ app.use(cors({
 }));
 app.use(compression());
 app.use(morgan('combined'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// IMPORTANT: Custom middleware for multipart/form-data
+app.use((req, res, next) => {
+    if (req.headers['content-type'] &&
+        req.headers['content-type'].includes('multipart/form-data')) {
+        parseMultipartFormData(req, res, next);
+    } else {
+        // Parse JSON for other content types
+        express.json({ limit: '50mb' })(req, res, next);
+        express.urlencoded({ extended: true, limit: '50mb' })(req, res, next);
+    }
+});
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
-}).then(() => { 
+}).then(() => {
     console.log('✅ MongoDB connected for Post Service');
 }).catch(err => {
     console.error('❌ MongoDB connection error:', err);
 });
+
 mongoose.connection.on("connected", () => {
     console.log("📌 Connected to DB:", mongoose.connection.name);
 });
+
 // Connect to RabbitMQ
 rabbitmqService.connect();
 

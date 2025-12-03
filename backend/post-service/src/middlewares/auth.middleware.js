@@ -5,6 +5,7 @@ class AuthMiddleware {
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('No token provided for protected route');
             return res.status(401).json({
                 success: false,
                 message: 'No token provided'
@@ -23,6 +24,7 @@ class AuthMiddleware {
                 req.user = response.data.user;
                 next();
             } else {
+                console.log('Invalid token');
                 return res.status(401).json({
                     success: false,
                     message: 'Invalid token'

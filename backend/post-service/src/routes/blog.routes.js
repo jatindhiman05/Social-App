@@ -5,9 +5,9 @@ const authMiddleware = require('../middlewares/auth.middleware');
 const router = express.Router();
 
 // Public routes
-router.get('/search', blogController.searchBlogs);  // put first
+router.get('/search', blogController.searchBlogs);
 router.get('/user/:userId', blogController.getBlogsByUser);
-router.get('/:blogId', blogController.getBlog);     // last
+router.get('/:blogId', blogController.getBlog);
 router.get('/', blogController.getBlogs);
 
 // Protected routes (require authentication)

@@ -14,20 +14,7 @@ class ProxyService {
         return createProxyMiddleware({
             target: services.identity,
             changeOrigin: true,
-            pathRewrite: { '^/api/auth': '/api' },
-            selfHandleResponse: true, // <-- important
-            onProxyRes: async (proxyRes, req, res) => {
-                let body = '';
-                proxyRes.on('data', chunk => { body += chunk.toString(); });
-                proxyRes.on('end', () => {
-                    try {
-                        const json = JSON.parse(body);
-                        res.status(proxyRes.statusCode).json(json); // forward exactly
-                    } catch (err) {
-                        res.status(500).json({ success: false, message: 'Proxy parse error' });
-                    }
-                });
-            }
+            pathRewrite: { '^/api/auth': '/api' }
         });
     }
 
@@ -35,7 +22,14 @@ class ProxyService {
         return createProxyMiddleware({
             target: services.post,
             changeOrigin: true,
-            pathRewrite: { '^/api/blogs': '/api' }
+            pathRewrite: { '^/api/blogs': '/api' },
+            onProxyReq: (proxyReq, req) => {
+                // For multipart/form-data, remove content-type header and let it pass through
+                if (req.headers['content-type'] &&
+                    req.headers['content-type'].includes('multipart/form-data')) {
+                    // Don't parse, let it pass through as stream
+                }
+            }
         });
     }
 

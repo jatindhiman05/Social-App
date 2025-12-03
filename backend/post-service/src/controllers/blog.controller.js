@@ -3,8 +3,24 @@ const blogService = require('../services/blog.service');
 class BlogController {
     async createBlog(req, res) {
         try {
-            console.log(req.user);
-            console.log("req",req.body);
+            console.log("=== CREATE BLOG REQUEST ===");
+            console.log("Request body fields:", Object.keys(req.body));
+            console.log("Request files keys:", Object.keys(req.files || {}));
+
+            // Log all fields
+            Object.keys(req.body).forEach(key => {
+                console.log(`Field ${key}:`, typeof req.body[key], req.body[key]);
+            });
+
+            // Log all files
+            Object.keys(req.files || {}).forEach(key => {
+                console.log(`File ${key}:`, req.files[key].map(f => ({
+                    originalname: f.originalname,
+                    mimetype: f.mimetype,
+                    size: f.size
+                })));
+            });
+
             const creator = req.user?.id;
             if (!creator) {
                 return res.status(401).json({
@@ -14,7 +30,26 @@ class BlogController {
             }
 
             const { title, description, content, tags, draft } = req.body;
-            const files = req.files;
+
+            // Validate required fields
+            if (!title || !description || !content) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Title, description, and content are required'
+                });
+            }
+
+            // Handle files - combine all files into one array
+            const allFiles = [];
+            if (req.files) {
+                Object.values(req.files).forEach(fileArray => {
+                    if (Array.isArray(fileArray)) {
+                        allFiles.push(...fileArray);
+                    }
+                });
+            }
+
+            console.log("Total files to process:", allFiles.length);
 
             const result = await blogService.createBlog(creator, {
                 title,
@@ -22,7 +57,7 @@ class BlogController {
                 content,
                 tags,
                 draft
-            }, files ? Object.values(files).flat() : null);
+            }, allFiles);
 
             res.status(200).json({
                 success: true,
@@ -37,6 +72,7 @@ class BlogController {
             });
         }
     }
+
 
     async getBlogs(req, res) {
         try {
@@ -91,20 +127,56 @@ class BlogController {
                 });
             }
 
+            console.log("Update blog request body:", req.body);
+            console.log("Update blog files:", req.files);
+
+            // Parse fields
+            let parsedTags = [];
+            let parsedContent;
+            let parsedExistingImages = [];
+
+            try {
+                parsedContent = typeof req.body.content === 'string' ?
+                    JSON.parse(req.body.content) : req.body.content;
+            } catch (error) {
+                console.error('Content parse error:', error);
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid content format'
+                });
+            }
+
+            try {
+                parsedTags = typeof req.body.tags === 'string' ?
+                    JSON.parse(req.body.tags) : (req.body.tags || []);
+            } catch (error) {
+                console.error('Tags parse error:', error);
+                parsedTags = [];
+            }
+
+            try {
+                parsedExistingImages = typeof req.body.existingImages === 'string' ?
+                    JSON.parse(req.body.existingImages) : (req.body.existingImages || []);
+            } catch (error) {
+                console.error('Existing images parse error:', error);
+                parsedExistingImages = [];
+            }
+
             const updateData = {
                 title: req.body.title,
                 description: req.body.description,
-                content: req.body.content,
-                tags: req.body.tags,
-                draft: req.body.draft,
-                existingImages: req.body.existingImages
+                content: parsedContent,
+                tags: parsedTags,
+                draft: req.body.draft === 'true' || req.body.draft === true,
+                existingImages: parsedExistingImages
             };
 
-            const files = req.files;
-            const images = files ? {
-                cover: files.image?.[0],
+            // Handle files
+            const files = req.files || {};
+            const images = {
+                cover: files.image?.[0] || null,
                 embedded: files.images || []
-            } : null;
+            };
 
             const blog = await blogService.updateBlog(id, userId, updateData, images);
 
