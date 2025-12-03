@@ -22,15 +22,17 @@ function ProfilePage() {
     const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
 
     function renderComponent() {
+        if (!userData) return null;
+        
         if (location.pathname === `/${username}`) {
             return (
-                <DisplayBlogs blogs={userData.blogs.filter((blog) => !blog.draft)} />
+                <DisplayBlogs blogs={userData.blogs?.filter((blog) => !blog.draft) || []} />
             );
         } else if (location.pathname === `/${username}/saved-blogs`) {
             return (
                 <>
                     {userData.showSavedBlogs || userData._id === userId ? (
-                        <DisplayBlogs blogs={userData.saveBlogs} />
+                        <DisplayBlogs blogs={userData.saveBlogs || []} />
                     ) : (
                         <Navigate to={`/${username}`} />
                     )}
@@ -40,7 +42,7 @@ function ProfilePage() {
             return (
                 <>
                     {userData._id === userId ? (
-                        <DisplayBlogs blogs={userData.blogs.filter((blog) => blog.draft)} />
+                        <DisplayBlogs blogs={userData.blogs?.filter((blog) => blog.draft) || []} />
                     ) : (
                         <Navigate to={`/${username}`} />
                     )}
@@ -50,7 +52,7 @@ function ProfilePage() {
             return (
                 <>
                     {userData.showLikedBlogs || userData._id === userId ? (
-                        <DisplayBlogs blogs={userData.likeBlogs} />
+                        <DisplayBlogs blogs={userData.likeBlogs || []} />
                     ) : (
                         <Navigate to={`/${username}`} />
                     )}
@@ -63,18 +65,69 @@ function ProfilePage() {
         async function fetchUserDetails() {
             try {
                 setIsLoading(true);
+                // Extract username without @ symbol
+                const cleanUsername = username.startsWith('@') ? username.substring(1) : username;
+                console.log('Fetching profile for username:', cleanUsername);
+                
                 let res = await axios.get(
-                    `${import.meta.env.VITE_BACKEND_URL}/users/${username.split("@")[1]}`
+                    `${import.meta.env.VITE_BACKEND_URL}/users/${cleanUsername}`
                 );
                 setUserData(res.data.user);
             } catch (error) {
-                toast.error(error.response?.data?.message || "Failed to load profile");
+                console.error('Profile fetch error:', error);
+                console.log('Error status:', error.response?.status);
+                console.log('Current userId:', userId);
+                console.log('Has token:', !!token);
+                
+                // If user not found and viewing own profile, try to sync it
+                if (error.response?.status === 404 && token && userId) {
+                    const currentUsername = username.startsWith('@') ? username.substring(1) : username;
+                    // Get user data from localStorage
+                    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                    console.log('Stored user:', storedUser);
+                    console.log('Current username:', currentUsername);
+                    console.log('Stored username:', storedUser.username);
+                    
+                    if (currentUsername === storedUser.username) {
+                        console.log('Attempting to sync profile...');
+                        toast.loading('Creating your profile...');
+                        try {
+                            const syncRes = await axios.post(
+                                `${import.meta.env.VITE_BACKEND_URL}/users/sync-profile`,
+                                {
+                                    userId: storedUser.id,
+                                    name: storedUser.name,
+                                    email: storedUser.email,
+                                    username: storedUser.username,
+                                    profilePic: storedUser.profilePic,
+                                    googleAuth: storedUser.googleAuth || false
+                                }
+                            );
+                            console.log('Sync response:', syncRes.data);
+                            toast.dismiss();
+                            if (syncRes.data.success) {
+                                setUserData(syncRes.data.user);
+                                toast.success('Profile created successfully!');
+                                return;
+                            }
+                        } catch (syncError) {
+                            toast.dismiss();
+                            console.error('Profile sync error:', syncError);
+                            console.log('Sync error response:', syncError.response?.data);
+                            toast.error(syncError.response?.data?.message || 'Failed to create profile');
+                        }
+                    }
+                }
+                
+                if (!userData) {
+                    toast.error(error.response?.data?.message || "Failed to load profile");
+                }
             } finally {
                 setIsLoading(false);
             }
         }
         fetchUserDetails();
-    }, [username]);
+    }, [username, token, userId]);
 
     if (isLoading) {
         return (
@@ -101,11 +154,6 @@ function ProfilePage() {
     }
 
     if (!userData) {
-        setTimeout(() => {
-            dispatch(logout());
-            navigate('/');
-            window.location.reload();
-        }, 1000);
         return (
             <div className="min-h-screen bg-gray-50 dark:bg-darkbg flex flex-col items-center justify-center px-4">
                 <div className="text-center max-w-md p-8 bg-white dark:bg-darkcard rounded-xl shadow-lg border border-gray-200 dark:border-darkborder">
@@ -141,15 +189,15 @@ function ProfilePage() {
                             <div className="w-32 h-32 rounded-full overflow-hidden border-2 border-white dark:border-darkbg shadow-lg bg-gray-100 dark:bg-darkcard">
                                 <img
                                     src={
-                                        userData.profilePic
+                                        userData?.profilePic
                                             ? userData.profilePic
-                                            : `https://api.dicebear.com/9.x/initials/svg?seed=${userData.name}`
+                                            : `https://api.dicebear.com/9.x/initials/svg?seed=${userData?.name || 'User'}`
                                     }
-                                    alt={userData.name}
+                                    alt={userData?.name || 'User'}
                                     className="w-full h-full object-cover"
                                 />
                             </div>
-                            {userData._id === userId && (
+                            {userData?._id === userId && (
                                 <Link
                                     to="/edit-profile"
                                     className="absolute -bottom-2 -right-2 bg-white dark:bg-darkcard text-indigo-600 dark:text-accent p-2 rounded-full shadow-md hover:bg-gray-50 dark:hover:bg-darkbg transition-colors border border-gray-200 dark:border-darkborder hover:shadow-lg"
@@ -161,11 +209,11 @@ function ProfilePage() {
 
                         <div className="flex-1 text-center md:text-left space-y-4">
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-900 dark:text-darktext">{userData.name}</h1>
-                                <p className="text-gray-500 dark:text-darktext/70">@{username.split("@")[1]}</p>
+                                <h1 className="text-3xl font-bold text-gray-900 dark:text-darktext">{userData?.name || 'User'}</h1>
+                                <p className="text-gray-500 dark:text-darktext/70">@{username?.split("@")[1] || username}</p>
                             </div>
 
-                            {userData.bio && (
+                            {userData?.bio && (
                                 <p className="text-gray-600 dark:text-darktext/80 max-w-lg mx-auto md:mx-0">{userData.bio}</p>
                             )}
 
@@ -176,7 +224,7 @@ function ProfilePage() {
                                 >
                                     <Users className="w-4 h-4 text-indigo-500 dark:text-accent" />
                                     <span className="text-sm">
-                                        <span className="font-medium">{userData.followers.length}</span> followers
+                                        <span className="font-medium">{userData?.followers?.length || 0}</span> followers
                                     </span>
                                 </button>
                                 <button
@@ -185,33 +233,33 @@ function ProfilePage() {
                                 >
                                     <UserPlus className="w-4 h-4 text-indigo-500 dark:text-accent" />
                                     <span className="text-sm">
-                                        <span className="font-medium">{userData.following.length}</span> following
+                                        <span className="font-medium">{userData?.following?.length || 0}</span> following
                                     </span>
                                 </button>
                                 <div className="flex items-center gap-2 text-gray-700 dark:text-darktext/80 bg-gray-50 dark:bg-darkbg px-3 py-1.5 rounded-full border border-gray-200 dark:border-darkborder">
                                     <BookOpen className="w-4 h-4 text-indigo-500 dark:text-accent" />
                                     <span className="text-sm">
-                                        <span className="font-medium">{userData.blogs.filter(blog => !blog.draft).length}</span> posts
+                                        <span className="font-medium">{userData?.blogs?.filter(blog => !blog?.draft).length || 0}</span> posts
                                     </span>
                                 </div>
                             </div>
 
-                            {userId !== userData._id && (
+                            {userId !== userData?._id && (
                                 <div className="flex gap-3 justify-center md:justify-start">
                                     <button
                                         onClick={async () => {
-                                            if (followLoading) return;
+                                            if (followLoading || !userData?._id) return;
                                             setFollowLoading(true);
                                             const followed = await handleFollowCreator(userData._id, token, dispatch, userId);
                                             if (followed === true) {
                                                 setUserData((prev) => ({
                                                     ...prev,
-                                                    followers: [...prev.followers, userId],
+                                                    followers: [...(prev?.followers || []), userId],
                                                 }));
                                             } else if (followed === false) {
                                                 setUserData((prev) => ({
                                                     ...prev,
-                                                    followers: prev.followers.filter((id) => id !== userId),
+                                                    followers: prev?.followers?.filter((id) => id !== userId) || [],
                                                 }));
                                             }
                                             setFollowLoading(false);
@@ -219,7 +267,7 @@ function ProfilePage() {
                                         disabled={followLoading}
                                         className={`mt-2 px-6 py-2.5 rounded-full font-medium flex items-center justify-center gap-2 mx-auto md:mx-0 transition-all shadow-sm hover:shadow-md
                                             ${followLoading ? "opacity-90 cursor-not-allowed" : ""}
-                                            ${following.includes(userData._id)
+                                            ${following?.includes(userData?._id)
                                                 ? "bg-indigo-50 dark:bg-darkbg text-indigo-700 dark:text-accent hover:bg-indigo-100 dark:hover:bg-darkborder border border-indigo-100 dark:border-darkborder"
                                                 : "bg-indigo-600 dark:bg-accent text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
                                             }`}
@@ -227,7 +275,7 @@ function ProfilePage() {
                                         {followLoading ? (
                                             <div className="flex items-center gap-2">
                                                 <svg
-                                                    className={`w-4 h-4 ${following.includes(userData._id) ? "text-indigo-600 dark:text-accent" : "text-white"}`}
+                                                    className={`w-4 h-4 ${following?.includes(userData?._id) ? "text-indigo-600 dark:text-accent" : "text-white"}`}
                                                     viewBox="0 0 24 24"
                                                     xmlns="http://www.w3.org/2000/svg"
                                                 >
@@ -245,7 +293,7 @@ function ProfilePage() {
                                                 </svg>
                                                 <span>Processing...</span>
                                             </div>
-                                        ) : following.includes(userData._id) ? "Following" : "Follow"}
+                                        ) : following?.includes(userData?._id) ? "Following" : "Follow"}
                                     </button>
                                 </div>
                             )}
@@ -273,7 +321,7 @@ function ProfilePage() {
                                     <span>Blogs</span>
                                 </Link>
 
-                                {(userData.showSavedBlogs || userData._id === userId) && (
+                                {(userData?.showSavedBlogs || userData?._id === userId) && (
                                     <Link
                                         to={`/${username}/saved-blogs`}
                                         className={`flex items-center gap-2 px-6 py-4 whitespace-nowrap transition-colors ${location.pathname === `/${username}/saved-blogs`
@@ -286,7 +334,7 @@ function ProfilePage() {
                                     </Link>
                                 )}
 
-                                {(userData.showLikedBlogs || userData._id === userId) && (
+                                {(userData?.showLikedBlogs || userData?._id === userId) && (
                                     <Link
                                         to={`/${username}/liked-blogs`}
                                         className={`flex items-center gap-2 px-6 py-4 whitespace-nowrap transition-colors ${location.pathname === `/${username}/liked-blogs`
@@ -299,7 +347,7 @@ function ProfilePage() {
                                     </Link>
                                 )}
 
-                                {userData._id === userId && (
+                                {userData?._id === userId && (
                                     <Link
                                         to={`/${username}/draft-blogs`}
                                         className={`flex items-center gap-2 px-6 py-4 whitespace-nowrap transition-colors ${location.pathname === `/${username}/draft-blogs`
@@ -332,21 +380,21 @@ function ProfilePage() {
                             </div>
                             <div className="p-6 grid grid-cols-2 gap-4">
                                 <div className="bg-indigo-50/50 dark:bg-darkbg p-4 rounded-lg border border-indigo-100 dark:border-darkborder hover:border-indigo-200 dark:hover:border-accent transition-colors">
-                                    <p className="text-2xl font-bold text-indigo-600 dark:text-accent">{userData.blogs.filter(blog => !blog.draft).length}</p>
+                                    <p className="text-2xl font-bold text-indigo-600 dark:text-accent">{userData?.blogs?.filter(blog => !blog?.draft).length || 0}</p>
                                     <p className="text-sm text-gray-600 dark:text-darktext/70">Published</p>
                                 </div>
-                                {userData._id === userId && (
+                                {userData?._id === userId && (
                                     <div className="bg-purple-50/50 dark:bg-darkbg p-4 rounded-lg border border-purple-100 dark:border-darkborder hover:border-purple-200 dark:hover:border-purple-500 transition-colors">
-                                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{userData.blogs.filter(blog => blog.draft).length}</p>
+                                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{userData?.blogs?.filter(blog => blog?.draft).length || 0}</p>
                                         <p className="text-sm text-gray-600 dark:text-darktext/70">Drafts</p>
                                     </div>
                                 )}
                                 <div className="bg-green-50/50 dark:bg-darkbg p-4 rounded-lg border border-green-100 dark:border-darkborder hover:border-green-200 dark:hover:border-green-500 transition-colors">
-                                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{userData.likeBlogs.length}</p>
+                                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{userData?.likeBlogs?.length || 0}</p>
                                     <p className="text-sm text-gray-600 dark:text-darktext/70">Liked</p>
                                 </div>
                                 <div className="bg-yellow-50/50 dark:bg-darkbg p-4 rounded-lg border border-yellow-100 dark:border-darkborder hover:border-yellow-200 dark:hover:border-yellow-500 transition-colors">
-                                    <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{userData.saveBlogs.length}</p>
+                                    <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{userData?.saveBlogs?.length || 0}</p>
                                     <p className="text-sm text-gray-600 dark:text-darktext/70">Saved</p>
                                 </div>
                             </div>
@@ -361,7 +409,7 @@ function ProfilePage() {
                                 </h2>
                             </div>
                             <div className="p-6">
-                                {userData.following.length > 0 ? (
+                                {userData?.following?.length > 0 ? (
                                     <div className="space-y-3">
                                         {userData.following.slice(0, 5).map((user) => (
                                             <Link
@@ -373,17 +421,17 @@ function ProfilePage() {
                                                     <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 dark:bg-darkcard border border-gray-200 dark:border-darkborder">
                                                         <img
                                                             src={
-                                                                user.profilePic
+                                                                user?.profilePic
                                                                     ? user.profilePic
-                                                                    : `https://api.dicebear.com/9.x/initials/svg?seed=${user.name}`
+                                                                    : `https://api.dicebear.com/9.x/initials/svg?seed=${user?.name || 'User'}`
                                                             }
-                                                            alt={user.name}
+                                                            alt={user?.name || 'User'}
                                                             className="w-full h-full object-cover"
                                                         />
                                                     </div>
                                                     <div>
-                                                        <p className="font-medium text-gray-900 dark:text-darktext group-hover:text-indigo-600 dark:group-hover:text-accent">{user.name}</p>
-                                                        <p className="text-sm text-gray-500 dark:text-darktext/70">@{user.username}</p>
+                                                        <p className="font-medium text-gray-900 dark:text-darktext group-hover:text-indigo-600 dark:group-hover:text-accent">{user?.name || 'User'}</p>
+                                                        <p className="text-sm text-gray-500 dark:text-darktext/70">@{user?.username}</p>
                                                     </div>
                                                 </div>
                                                 <ChevronRight className="w-5 h-5 text-gray-400 dark:text-darktext/70 group-hover:text-indigo-600 dark:group-hover:text-accent" />
@@ -417,11 +465,11 @@ function ProfilePage() {
                                 <div className="flex items-center gap-2 text-gray-600 dark:text-darktext/80">
                                     <Calendar className="w-5 h-5 text-gray-400 dark:text-darktext/70" />
                                     <span>
-                                        {new Date(userData.createdAt).toLocaleDateString('en-US', {
+                                        {userData?.createdAt ? new Date(userData.createdAt).toLocaleDateString('en-US', {
                                             year: 'numeric',
                                             month: 'long',
                                             day: 'numeric'
-                                        })}
+                                        }) : 'N/A'}
                                     </span>
                                 </div>
                             </div>
@@ -438,7 +486,7 @@ function ProfilePage() {
                 maxWidth="max-w-md"
             >
                 <div className="max-h-[400px] overflow-y-auto">
-                    {userData.followers.length > 0 ? (
+                    {userData?.followers?.length > 0 ? (
                         <div className="space-y-3">
                             {userData.followers.map((user) => (
                                 <Link
@@ -451,20 +499,20 @@ function ProfilePage() {
                                         <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 dark:bg-darkcard border border-gray-200 dark:border-darkborder">
                                             <img
                                                 src={
-                                                    user.profilePic
+                                                    user?.profilePic
                                                         ? user.profilePic
-                                                        : `https://api.dicebear.com/9.x/initials/svg?seed=${user.name}`
+                                                        : `https://api.dicebear.com/9.x/initials/svg?seed=${user?.name || 'User'}`
                                                 }
-                                                alt={user.name}
+                                                alt={user?.name || 'User'}
                                                 className="w-full h-full object-cover"
                                             />
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-900 dark:text-darktext group-hover:text-indigo-600 dark:group-hover:text-accent">
-                                                {user.name}
+                                                {user?.name || 'User'}
                                             </p>
                                             <p className="text-sm text-gray-500 dark:text-darktext/70">
-                                                @{user.username}
+                                                @{user?.username}
                                             </p>
                                         </div>
                                     </div>
@@ -497,7 +545,7 @@ function ProfilePage() {
                 maxWidth="max-w-md"
             >
                 <div className="max-h-[400px] overflow-y-auto">
-                    {userData.following.length > 0 ? (
+                    {userData?.following?.length > 0 ? (
                         <div className="space-y-3">
                             {userData.following.map((user) => (
                                 <Link
@@ -510,20 +558,20 @@ function ProfilePage() {
                                         <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 dark:bg-darkcard border border-gray-200 dark:border-darkborder">
                                             <img
                                                 src={
-                                                    user.profilePic
+                                                    user?.profilePic
                                                         ? user.profilePic
-                                                        : `https://api.dicebear.com/9.x/initials/svg?seed=${user.name}`
+                                                        : `https://api.dicebear.com/9.x/initials/svg?seed=${user?.name || 'User'}`
                                                 }
-                                                alt={user.name}
+                                                alt={user?.name || 'User'}
                                                 className="w-full h-full object-cover"
                                             />
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-900 dark:text-darktext group-hover:text-indigo-600 dark:group-hover:text-accent">
-                                                {user.name}
+                                                {user?.name || 'User'}
                                             </p>
                                             <p className="text-sm text-gray-500 dark:text-darktext/70">
-                                                @{user.username}
+                                                @{user?.username}
                                             </p>
                                         </div>
                                     </div>

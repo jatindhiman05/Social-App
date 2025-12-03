@@ -18,6 +18,7 @@ router.get('/blogs/:blogId', proxy.createPostProxy());
 
 // Public user routes  
 router.get('/users', proxy.createUserProxy());
+router.post('/users/sync-profile', proxy.createUserProxy());
 router.get('/users/:username', proxy.createUserProxy());
 
 // Protected routes (require auth)

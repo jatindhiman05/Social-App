@@ -7,6 +7,7 @@ const router = express.Router();
 // Public routes
 router.get('/', userController.getAllUsers);
 router.get('/search', userController.searchUsers);
+router.post('/sync-profile', userController.syncProfile);
 router.get('/:username', userController.getProfile);
 
 // Protected routes

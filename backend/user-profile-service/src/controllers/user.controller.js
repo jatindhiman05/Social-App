@@ -5,7 +5,7 @@ class UserController {
         try {
             const { username } = req.params;
 
-            const profile = await userService.getProfileByUsername(username);
+            let profile = await userService.getProfileByUsername(username);
 
             res.status(200).json({
                 success: true,
@@ -13,7 +13,14 @@ class UserController {
                 user: profile
             });
         } catch (error) {
+            const { username } = req.params;
             console.error('Get profile error:', error);
+            
+            // If user not found, try to fetch from identity service and create profile
+            if (error.message === 'User not found') {
+                console.log(`Profile not found for username: ${username}, attempting to sync from identity service`);
+            }
+            
             res.status(error.message === 'User not found' ? 404 : 500).json({
                 success: false,
                 message: error.message || 'Failed to fetch profile'
@@ -242,6 +249,41 @@ class UserController {
             });
         }
     }
+
+    async syncProfile(req, res) {
+        try {
+            const { userId, name, email, username, profilePic, googleAuth } = req.body;
+
+            if (!userId || !name || !email || !username) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'userId, name, email, and username are required'
+                });
+            }
+
+            const profile = await userService.createProfileFromEvent({
+                userId,
+                name,
+                email,
+                username,
+                profilePic,
+                googleAuth: googleAuth || false
+            });
+
+            res.status(200).json({
+                success: true,
+                message: 'Profile synced successfully',
+                user: profile
+            });
+        } catch (error) {
+            console.error('Sync profile error:', error);
+            res.status(error.message === 'Profile already exists' ? 400 : 500).json({
+                success: false,
+                message: error.message || 'Failed to sync profile'
+            });
+        }
+    }
 }
+
 
 module.exports = new UserController();
