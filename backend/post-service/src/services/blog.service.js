@@ -7,6 +7,7 @@ const imageService = require('./image.service');
 class BlogService {
     async createBlog(creator, blogData, images) {
         try {
+            console.log(blogData);
             const { title, description, content, tags, draft } = blogData;
 
             if (!title || !description || !content) {

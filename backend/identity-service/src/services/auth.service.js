@@ -7,6 +7,7 @@ const emailService = require('./email.service');
 
 class AuthService {
     async createUser(userData) {
+        
         try {
             const { name, password, email } = userData;
 
@@ -136,68 +137,88 @@ class AuthService {
         };
     }
 
-    async googleAuth(accessToken, name, email) {
-        let user = await User.findOne({ email });
+    async googleAuth(accessToken, userData) {
+        try {
+            // For now, accept the user data directly from frontend
+            // In production, verify with Firebase Admin SDK
+            const { name, email } = userData;
 
-        if (user) {
-            if (user.googleAuth) {
-                const token = jwt.sign(
-                    { id: user._id, email: user.email },
-                    process.env.JWT_SECRET,
-                    { expiresIn: '7d' }
-                );
-
-                return {
-                    token,
-                    user: {
-                        id: user._id,
-                        name: user.name,
-                        email: user.email,
-                        username: user.username,
-                        googleAuth: user.googleAuth
-                    }
-                };
-            } else {
-                throw new Error('Email already registered without Google');
+            if (!email) {
+                throw new Error('Email is required');
             }
-        }
 
-        // Create new user
-        const username = email.split("@")[0] + "-" + randomUUID();
-        user = await User.create({
-            name,
-            email,
-            googleAuth: true,
-            isVerify: true,
-            username
-        });
+            let user = await User.findOne({ email });
 
-        const token = jwt.sign(
-            { id: user._id, email: user.email },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-        );
+            if (user) {
+                if (user.googleAuth) {
+                    const token = jwt.sign(
+                        { id: user._id, email: user.email },
+                        process.env.JWT_SECRET,
+                        { expiresIn: '7d' }
+                    );
 
-        // Publish user created event for profile service
-        rabbitmqService.publish('user.events', {
-            type: 'USER_CREATED',
-            userId: user._id,
-            email: user.email,
-            name: user.name,
-            username: user.username,
-            googleAuth: true
-        });
+                    return {
+                        user: {
+                            token,
+                            id: user._id,
+                            name: user.name,
+                            email: user.email,
+                            username: user.username,
+                            googleAuth: user.googleAuth
+                        }
+                    };
+                } else {
+                    throw new Error('Email already registered without Google');
+                }
+            }
 
-        return {
-            token,
-            user: {
-                id: user._id,
-                name: user.name,
+            // Create new user
+            const ShortUniqueId = require('short-unique-id');
+            const { randomUUID } = new ShortUniqueId({ length: 5 });
+            const username = email.split("@")[0] + "-" + randomUUID();
+
+            user = await User.create({
+                name,
+                email,
+                googleAuth: true,
+                isVerify: true,
+                username
+            }); 
+
+            // console.log(user);
+
+            const token = jwt.sign(
+                { id: user._id, email: user.email },
+                process.env.JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
+            console.log("token",token);
+
+            // Publish user created event
+            rabbitmqService.publish('user.events', {
+                type: 'USER_CREATED',
+                userId: user._id,
                 email: user.email,
+                name: user.name,
                 username: user.username,
-                googleAuth: user.googleAuth
-            }
-        };
+                googleAuth: true
+            });
+
+            return {
+                user: {
+                    token,
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    username: user.username,
+                    googleAuth: user.googleAuth
+                }
+            };
+        } catch (error) {
+            console.error('Google auth error:', error);
+            throw error;
+        }
     }
 
     async verifyEmail(token) {

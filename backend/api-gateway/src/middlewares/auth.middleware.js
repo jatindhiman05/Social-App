@@ -12,33 +12,33 @@ const PUBLIC_ROUTES = [
     '/api/auth/verify-email',
     '/api/blogs',
     '/api/blogs/search',
-    '/api/users/[a-zA-Z0-9_]+',
     '/health',
     '/api/health'
 ];
 
+// Dynamic public routes patterns
+const PUBLIC_DYNAMIC_ROUTES = [
+    { prefix: '/api/users/' } // matches /api/users/:username
+];
+
 // Helper function to check if route is public
 function isPublicRoute(path) {
-    return PUBLIC_ROUTES.some(route => {
-        const pattern = route.replace(/\[[^\]]+\]/g, '[^/]+');
-        return new RegExp(`^${pattern}$`).test(path);
-    });
+    // Exact match
+    if (PUBLIC_ROUTES.includes(path)) return true;
+
+    // Dynamic routes
+    return PUBLIC_DYNAMIC_ROUTES.some(route => path.startsWith(route.prefix));
 }
 
 // Auth middleware
 async function verifyToken(req, res, next) {
     // Skip auth for public routes
-    if (isPublicRoute(req.path)) {
-        return next();
-    }
+    if (isPublicRoute(req.path)) return next();
 
     // Skip for OPTIONS preflight
-    if (req.method === 'OPTIONS') {
-        return next();
-    }
+    if (req.method === 'OPTIONS') return next();
 
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({
             success: false,
@@ -94,9 +94,7 @@ function requireRole(role) {
                 message: 'Authentication required'
             });
         }
-
-        // You can implement role checking here if needed
-        // For now, just pass through
+        // Implement role check if needed
         next();
     };
 }

@@ -22,9 +22,10 @@ app.use(compression());
 
 // Logging
 app.use(morgan('combined'));
+app.use('/api', proxyRoutes);
 
 // Request parsing
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting
@@ -34,7 +35,6 @@ app.use('/api', rateLimit.general);
 app.get('/health', require('./controllers/health.controller').getHealth);
 
 // API routes
-app.use('/api', proxyRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

@@ -30,6 +30,10 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.error('❌ MongoDB connection error:', err);
 });
 
+mongoose.connection.on("connected", () => {
+    console.log("📌 Connected to DB:", mongoose.connection.name);
+});
+
 // Connect to RabbitMQ and start consuming
 rabbitmqService.connect().then(() => {
     rabbitmqService.consumeCommentEvents();

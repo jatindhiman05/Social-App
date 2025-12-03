@@ -3,7 +3,7 @@ import {
     getAuth,
     GoogleAuthProvider,
     signInWithPopup,
-    signInWithRedirect,
+    // signInWithRedirect,
     getRedirectResult,
 } from "firebase/auth";
 import toast from "react-hot-toast";
@@ -22,30 +22,19 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 // Check if user is on mobile
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+// const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 export async function googleAuth() {
     try {
-        if (isMobile) {
-            // Use redirect method for mobile
-            await signInWithRedirect(auth, provider);
-
-            // Get redirect result
-            const result = await getRedirectResult(auth);
-            if (result) {
-                return result.user;
-            }
-        } else {
-            // Use popup for desktop
-            const result = await signInWithPopup(auth, provider);
-            return result.user;
-        }
+        const result = await signInWithPopup(auth, provider);
+        return result.user;   // ALWAYS return Firebase user
     } catch (error) {
         console.error("Authentication error:", error);
         toast.error("Please try again later");
         return null;
     }
 }
+
 
 export async function handleRedirectResult() {
     try {

@@ -40,16 +40,31 @@ function AddBlog() {
     const dispatch = useDispatch();
 
     async function handlePostBlog() {
+        // Check required fields
+        if (!blogData.title || !blogData.description || !blogData.content) {
+            toast.error("Title, description, and content are required");
+            return;
+        }
+
+        const formData = new FormData();
+
+        // Append main fields
         formData.append("title", blogData.title);
         formData.append("description", blogData.description);
-        formData.append("image", blogData.image);
-        formData.append("content", JSON.stringify(blogData.content));
-        formData.append("tags", JSON.stringify(blogData.tags));
-        formData.append("draft", blogData.draft);
+        formData.append("draft", blogData.draft || false);
 
-        blogData.content.blocks.forEach((block) => {
-            if (block.type === "image") {
-                console.log(block)
+        // Content and tags as JSON strings
+        formData.append("content", JSON.stringify(blogData.content));
+        formData.append("tags", JSON.stringify(blogData.tags || []));
+
+        // Append main image if present
+        if (blogData.image instanceof File) {
+            formData.append("image", blogData.image);
+        }
+
+        // Append images from content blocks (if any)
+        blogData.content.blocks.forEach((block, index) => {
+            if (block.type === "image" && block.data?.file?.image instanceof File) {
                 formData.append("images", block.data.file.image);
             }
         });
@@ -66,16 +81,19 @@ function AddBlog() {
                     },
                 }
             );
-            console.log(res)
-            toast.success(res.data.message);
+            toast.success(res.data.message || "Blog created successfully!");
             navigate("/");
         } catch (error) {
-            console.log(error)
-            toast.error(error.response.data.message);
+            console.error(error);
+
+            // Safe error handling
+            const msg = error.response?.data?.message || error.message;
+            toast.error(msg);
         } finally {
             stopLoading();
         }
     }
+
 
     async function handleUpdateBlog() {
         let formData = new FormData();

@@ -3,6 +3,8 @@ const blogService = require('../services/blog.service');
 class BlogController {
     async createBlog(req, res) {
         try {
+            console.log(req.user);
+            console.log("req",req.body);
             const creator = req.user?.id;
             if (!creator) {
                 return res.status(401).json({

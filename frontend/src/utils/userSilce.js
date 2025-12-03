@@ -20,6 +20,7 @@ const userSlice = createSlice({
     reducers: {
         login(state, action) {
             const user = { ...state, ...action.payload };
+            console.log(user);
             localStorage.setItem("user", JSON.stringify(user));
             return user;
         },

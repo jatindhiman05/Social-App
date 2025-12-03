@@ -45,16 +45,24 @@ function AuthForm({ type }) {
 
     async function handleGoogleAuth() {
         setGoogleLoading(true);
-        try {
-            let userData = await googleAuth();
-            if (!userData) return;
 
-            const idToken = await userData.getIdToken();
+        try {
+            const user = await googleAuth();
+            if (!user) throw new Error("Login failed");
+
+            const idToken = await user.getIdToken();
 
             const res = await axios.post(
                 `${import.meta.env.VITE_BACKEND_URL}/auth/google-auth`,
-                { accessToken: idToken }
+                {
+                    accessToken: idToken,
+                    name: user.displayName,
+                    email: user.email,
+                    photoURL: user.photoURL
+                }
             );
+
+            console.log(res.data.user);
 
             dispatch(login(res.data.user));
             toast.success(res.data.message);
@@ -66,6 +74,8 @@ function AuthForm({ type }) {
             setGoogleLoading(false);
         }
     }
+
+
 
     useEffect(() => {
         const handleRedirect = async () => {

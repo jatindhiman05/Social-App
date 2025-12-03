@@ -4,12 +4,12 @@ class AuthController {
     async signup(req, res) {
         try {
             const { name, password, email } = req.body;
-
+            console.log("sign up endpoint hit");
             if (!name || !password || !email) {
                 return res.status(400).json({
                     success: false,
-                    message: "All fields are required"
-                });
+                    message: "All fields are required" 
+                }); 
             }
 
             const result = await authService.createUser({ name, password, email });
@@ -51,16 +51,22 @@ class AuthController {
 
     async googleAuth(req, res) {
         try {
-            const { accessToken, name, email } = req.body;
+            // Accept data directly from frontend for now
+            console.log(req.body);
+            const { accessToken, name, email, photoURL } = req.body;
 
-            if (!accessToken || !email) {
+            if (!email) {
                 return res.status(400).json({
                     success: false,
-                    message: "Access token and email are required"
+                    message: "Email is required"
                 });
             }
 
-            const result = await authService.googleAuth(accessToken, name, email);
+            const result = await authService.googleAuth(accessToken, {
+                name: name || email.split('@')[0],
+                email,
+                photoURL
+            });
 
             res.status(200).json({
                 success: true,
@@ -68,6 +74,7 @@ class AuthController {
                 ...result
             });
         } catch (error) {
+            console.error('Google auth error:', error);
             res.status(400).json({
                 success: false,
                 message: error.message

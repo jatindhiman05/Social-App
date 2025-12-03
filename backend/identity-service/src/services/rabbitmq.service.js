@@ -1,7 +1,7 @@
 const amqp = require('amqplib');
 
 class RabbitMQService {
-    constructor() {
+    constructor() { 
         this.connection = null;
         this.channel = null;
     }
