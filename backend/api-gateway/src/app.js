@@ -22,26 +22,29 @@ app.use(compression());
 
 // Logging
 app.use(morgan('combined'));
-
-// IMPORTANT: Don't parse multipart/form-data at the gateway level
-app.use((req, res, next) => {
-    if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
-        // Skip body parsing for multipart/form-data
-        next();
-    } else {
-        // Parse JSON for other content types
-        express.json({ limit: '50mb' })(req, res, next);
-        express.urlencoded({ extended: true, limit: '50mb' })(req, res, next);
-    }
-});
-
 app.use('/api', proxyRoutes);
+
+// Request parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting
 app.use('/api', rateLimit.general);
 
 // Health check route
 app.get('/health', require('./controllers/health.controller').getHealth);
+
+// API routes
+app.use((req, res, next) => {
+    const ct = req.headers['content-type'];
+    if (ct && ct.includes('multipart/form-data')) {
+        return next(); // Don't parse multipart at gateway
+    }
+
+    express.json({ limit: '50mb' })(req, res, () => {
+        express.urlencoded({ extended: true, limit: '50mb' })(req, res, next);
+    });
+});
 
 // 404 handler
 app.use('*', (req, res) => {

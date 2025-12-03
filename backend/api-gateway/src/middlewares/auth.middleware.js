@@ -21,12 +21,9 @@ const PUBLIC_DYNAMIC_ROUTES = [
     { prefix: '/api/users/' } // matches /api/users/:username
 ];
 
-// Helper function to check if route is public
+// Check if route is public
 function isPublicRoute(path) {
-    // Exact match
     if (PUBLIC_ROUTES.includes(path)) return true;
-
-    // Dynamic routes
     return PUBLIC_DYNAMIC_ROUTES.some(route => path.startsWith(route.prefix));
 }
 
@@ -35,7 +32,7 @@ async function verifyToken(req, res, next) {
     // Skip auth for public routes
     if (isPublicRoute(req.path)) return next();
 
-    // Skip for OPTIONS preflight
+    // Skip OPTIONS preflight
     if (req.method === 'OPTIONS') return next();
 
     const authHeader = req.headers.authorization;
@@ -49,7 +46,7 @@ async function verifyToken(req, res, next) {
     const token = authHeader.split(' ')[1];
 
     try {
-        // Verify token with Identity Service
+        // Verify token via Identity Service
         const response = await axios.get(`${IDENTITY_SERVICE_URL}/api/validate-token`, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 5000
@@ -58,16 +55,17 @@ async function verifyToken(req, res, next) {
         if (response.data.valid) {
             req.user = response.data.user;
             return next();
-        } else {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid token'
-            });
         }
+
+        return res.status(401).json({
+            success: false,
+            message: 'Invalid token'
+        });
+
     } catch (error) {
         console.error('Token validation error:', error.message);
 
-        // Fallback: Try JWT verification locally
+        // Fallback: local JWT verification
         try {
             const decoded = jwt.verify(token, JWT_SECRET);
             req.user = {
@@ -76,7 +74,7 @@ async function verifyToken(req, res, next) {
             };
             console.warn('Using local JWT verification (Identity Service unavailable)');
             return next();
-        } catch (jwtError) {
+        } catch {
             return res.status(401).json({
                 success: false,
                 message: 'Authentication failed'
@@ -94,7 +92,7 @@ function requireRole(role) {
                 message: 'Authentication required'
             });
         }
-        // Implement role check if needed
+        // Add actual role checks here
         next();
     };
 }

@@ -12,11 +12,9 @@ router.get('/auth/verify-email/:verificationToken', proxy.createAuthProxy());
 router.get('/auth/confirm-transfer/:action/:token', proxy.createAuthProxy());
 
 // Public blog routes
-// IMPORTANT: Use a different path that won't conflict
 router.get('/blogs', proxy.createPostProxy());
 router.get('/blogs/search', proxy.createPostProxy());
 router.get('/blogs/:blogId', proxy.createPostProxy());
-router.get('/blogs/user/:userId', proxy.createPostProxy());
 
 // Public user routes  
 router.get('/users', proxy.createUserProxy());

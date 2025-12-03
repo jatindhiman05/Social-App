@@ -14,7 +14,20 @@ class ProxyService {
         return createProxyMiddleware({
             target: services.identity,
             changeOrigin: true,
-            pathRewrite: { '^/api/auth': '/api' }
+            pathRewrite: { '^/api/auth': '/api' },
+            selfHandleResponse: true, // <-- important
+            onProxyRes: async (proxyRes, req, res) => {
+                let body = '';
+                proxyRes.on('data', chunk => { body += chunk.toString(); });
+                proxyRes.on('end', () => {
+                    try {
+                        const json = JSON.parse(body);
+                        res.status(proxyRes.statusCode).json(json); // forward exactly
+                    } catch (err) {
+                        res.status(500).json({ success: false, message: 'Proxy parse error' });
+                    }
+                });
+            }
         });
     }
 
